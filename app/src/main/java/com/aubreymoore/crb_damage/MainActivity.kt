@@ -128,7 +128,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
             btnDecrement.setOnClickListener {
                 if (confidence_threshold > 0.05) {
                     confidence_threshold -= 0.05
-                    tvConfidence.text = "Confidence\nthreshold\n" + String.format("%.2f", confidence_threshold)
+                    tvConfidence.text = String.format(Locale.US, "Confidence\nthreshold\n%.2f", confidence_threshold)
                 }
             }
         }
@@ -136,7 +136,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
             btnIncrement.setOnClickListener {
                 if (confidence_threshold < 1.0) {
                     confidence_threshold += 0.05
-                    tvConfidence.text = "Confidence\nthreshold\n" + String.format("%.2f", confidence_threshold)
+                    tvConfidence.text = String.format(Locale.US, "Confidence\nthreshold\n%.2f", confidence_threshold)
                 }
             }
         }
@@ -205,7 +205,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
             )
 
             lastBitmap = rotatedBitmap
-            detector?.detect(rotatedBitmap)
+            detector?.detect(rotatedBitmap, confidence_threshold.toFloat())
         }
 
         cameraProvider.unbindAll()
@@ -252,14 +252,11 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
 
         // Try external storage first, fallback to app files
-        val baseDir = getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
-            ?: filesDir  // fallback to internal storage
-
         val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "CRB-detections")
         val dirCreated = dir.mkdirs()
         Log.d(TAG, "Directory: ${dir.absolutePath}, mkdirs() success: $dirCreated, exists: ${dir.exists()}")
 
-        val photoFile = File(dir, "CRB_${timestamp}.jpg")
+        val photoFile = File(dir, "CRB_$timestamp.jpg")
         Log.d(TAG, "Photo will be saved to: ${photoFile.absolutePath}")
 
         val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()

@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.aubreymoore.palm_highres_capture" // UPDATED
+    namespace = "com.aubreymoore.palm_highres_capture"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.aubreymoore.palm_highres_capture" // UPDATED
+        applicationId = "com.aubreymoore.palm_highres_capture"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -37,10 +37,16 @@ android {
     buildFeatures {
         viewBinding = true
     }
-}
-dependencies {
 
-    implementation("com.google.android.gms:play-services-location:21.2.0")
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+}
+
+dependencies {
+    implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
@@ -49,18 +55,18 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
 
-    val cameraxVersion = "1.4.0-beta02"
-    implementation("androidx.camera:camera-camera2:${cameraxVersion}")
-    implementation("androidx.camera:camera-lifecycle:${cameraxVersion}")
-    implementation("androidx.camera:camera-view:${cameraxVersion}")
-    implementation("org.tensorflow:tensorflow-lite:2.16.1")
+    val cameraxVersion = "1.4.0"
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
+    
+    val tfliteVersion = "2.16.1"
+    implementation("org.tensorflow:tensorflow-lite:$tfliteVersion")
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
-
     implementation("org.tensorflow:tensorflow-lite-gpu-delegate-plugin:0.4.4")
-    implementation("org.tensorflow:tensorflow-lite-gpu-api:2.16.1")
-    implementation("org.tensorflow:tensorflow-lite-api:2.16.1")
-    implementation("org.tensorflow:tensorflow-lite-gpu:2.16.1")
-    implementation("org.tensorflow:tensorflow-lite-select-tf-ops:2.16.1")
-
+    implementation("org.tensorflow:tensorflow-lite-gpu-api:$tfliteVersion")
+    implementation("org.tensorflow:tensorflow-lite-api:$tfliteVersion")
+    implementation("org.tensorflow:tensorflow-lite-gpu:$tfliteVersion")
+    implementation("org.tensorflow:tensorflow-lite-select-tf-ops:$tfliteVersion")
     implementation("org.tensorflow:tensorflow-lite-metadata:0.4.4")
 }

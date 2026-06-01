@@ -109,7 +109,7 @@ class Detector(
         interpreter.close()
     }
 
-    fun detect(frame: Bitmap) {
+    fun detect(frame: Bitmap, confidenceThreshold: Float) {
         if (tensorWidth == 0
             || tensorHeight == 0
             || numChannel == 0
@@ -129,7 +129,7 @@ class Detector(
         val output = TensorBuffer.createFixedSize(intArrayOf(1, numChannel, numElements), OUTPUT_IMAGE_TYPE)
         interpreter.run(imageBuffer, output.buffer)
 
-        val bestBoxes = bestBox(output.floatArray)
+        val bestBoxes = bestBox(output.floatArray, confidenceThreshold)
         inferenceTime = SystemClock.uptimeMillis() - inferenceTime
 
         if (bestBoxes == null) {
@@ -140,26 +140,26 @@ class Detector(
         detectorListener.onDetect(bestBoxes, inferenceTime)
     }
 
-    private fun bestBox(array: FloatArray) : List<BoundingBox>? {
+    private fun bestBox(array: FloatArray, confidenceThreshold: Float) : List<BoundingBox>? {
 
         val boundingBoxes = mutableListOf<BoundingBox>()
 
         for (c in 0 until numElements) {
 
-            var maxConf = CONFIDENCE_THRESHOLD
+            var maxConf = confidenceThreshold
             var maxIdx = -1
             var j = 4
             var arrayIdx = c + numElements * j
             while (j < numChannel){
                 if (array[arrayIdx] > maxConf) {
-                    maxConf = array[arrayIdx].toDouble()
+                    maxConf = array[arrayIdx]
                     maxIdx = j - 4
                 }
                 j++
                 arrayIdx += numElements
             }
 
-            if (maxConf > CONFIDENCE_THRESHOLD) {
+            if (maxConf > confidenceThreshold) {
                 val clsName = labels[maxIdx]
                 val cx = array[c] // 0
                 val cy = array[c + numElements] // 1
@@ -185,7 +185,7 @@ class Detector(
                     BoundingBox(
                         x1 = x1, y1 = y1, x2 = x2, y2 = y2,
                         cx = cx, cy = cy, w = w, h = h,
-                        cnf = maxConf.toFloat(), cls = maxIdx, clsName = clsName
+                        cnf = maxConf, cls = maxIdx, clsName = clsName
                     )
                 )
             }
@@ -239,12 +239,6 @@ class Detector(
         private const val INPUT_STANDARD_DEVIATION = 255f
         private val INPUT_IMAGE_TYPE = DataType.FLOAT32
         private val OUTPUT_IMAGE_TYPE = DataType.FLOAT32
-        //private const val CONFIDENCE_THRESHOLD = 0.3F
-        //TODO "CONFIDENCE_THRESHOLD = confidence_threshold" is bad code which should be fixed.
-        //The confidence_threshold variable is defined in MainActivity.kt and has global scope.
-        //It can be changed on the fly by the user.
-        //CONFIDENCE_THRESHOLD is a fixed value private to Class detector in Detector.kt.
-        private val CONFIDENCE_THRESHOLD = confidence_threshold
         private const val IOU_THRESHOLD = 0.5F
     }
 }
