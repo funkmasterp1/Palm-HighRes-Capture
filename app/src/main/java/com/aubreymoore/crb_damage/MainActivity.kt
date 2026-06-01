@@ -1,10 +1,10 @@
 package com.aubreymoore.crb_damage
-
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.os.Bundle
+import android.os.Environment
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,17 +13,22 @@ import androidx.camera.core.AspectRatio
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.aubreymoore.crb_damage.Constants.LABELS_PATH
 import com.aubreymoore.crb_damage.Constants.MODEL_PATH
-import crb_damage.R
-import crb_damage.databinding.ActivityMainBinding
+import com.aubreymoore.palm_highres_capture.R
+import com.aubreymoore.palm_highres_capture.databinding.ActivityMainBinding
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-
 var liveDetectorEnabled = true
 var deadDetectorEnabled = true
 var vcutDetectorEnabled = true
@@ -42,7 +47,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     private var camera: Camera? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private var detector: Detector? = null
-
+    private var imageCapture: ImageCapture? = null
     private lateinit var cameraExecutor: ExecutorService
 
     private lateinit var locationHelper: LocationHelper
@@ -68,7 +73,6 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
 
         locationHelper = LocationHelper(this)
         detectionLogger = DetectionLogger(this)
-
         if (allPermissionsGranted()) {
             startCamera()
             locationHelper.startLocationUpdates()
@@ -128,7 +132,6 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
                 }
             }
         }
-
         binding.apply {
             btnIncrement.setOnClickListener {
                 if (confidence_threshold < 1.0) {
@@ -177,6 +180,12 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
             .build()
 
+        // High-quality capture for SAM3 analysis
+        imageCapture = ImageCapture.Builder()
+            .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+            .setFlashMode(ImageCapture.FLASH_MODE_AUTO)
+            .build()
+
         imageAnalyzer?.setAnalyzer(cameraExecutor) { imageProxy ->
             val bitmapBuffer = Bitmap.createBitmap(
                 imageProxy.width, imageProxy.height, Bitmap.Config.ARGB_8888
@@ -201,7 +210,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
 
         cameraProvider.unbindAll()
         try {
-            camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalyzer)
+            camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalyzer, imageCapture)
             preview?.surfaceProvider = binding.viewFinder.surfaceProvider
         } catch (exc: Exception) {
             Log.e(TAG, "Use case binding failed", exc)
@@ -211,7 +220,6 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
         ContextCompat.checkSelfPermission(baseContext, it) == PackageManager.PERMISSION_GRANTED
     }
-
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
@@ -229,6 +237,60 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         runOnUiThread {
             Toast.makeText(baseContext, message, Toast.LENGTH_LONG).show()
         }
+    }
+
+    private fun captureHighResPhoto(boundingBoxes: List<BoundingBox>) {
+        Log.d(TAG, "captureHighResPhoto() called with ${boundingBoxes.size} boxes")
+
+        val capture = imageCapture
+        if (capture == null) {
+            Log.e(TAG, "imageCapture is NULL - cannot take photo")
+            return
+        }
+        Log.d(TAG, "imageCapture is ready")
+
+        val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
+
+        // Try external storage first, fallback to app files
+        val baseDir = getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+            ?: filesDir  // fallback to internal storage
+
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "CRB-detections")
+        val dirCreated = dir.mkdirs()
+        Log.d(TAG, "Directory: ${dir.absolutePath}, mkdirs() success: $dirCreated, exists: ${dir.exists()}")
+
+        val photoFile = File(dir, "CRB_${timestamp}.jpg")
+        Log.d(TAG, "Photo will be saved to: ${photoFile.absolutePath}")
+
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+
+        Log.d(TAG, "Calling takePicture()...")
+        capture.takePicture(
+            outputOptions,
+            cameraExecutor,
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onError(exc: ImageCaptureException) {
+                    Log.e(TAG, "Photo capture FAILED: ${exc.message}", exc)
+                }
+
+                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                    Log.d(TAG, "Photo capture SUCCESS: ${photoFile.absolutePath}")
+                    Log.d(TAG, "File size: ${photoFile.length()} bytes")
+
+                    val lat = locationHelper.getLatitude()
+                    val lon = locationHelper.getLongitude()
+                    Log.d(TAG, "GPS coordinates: $lat, $lon")
+
+                    detectionLogger.logHighResDetection(
+                        photoFile = photoFile,
+                        boundingBoxes = boundingBoxes,
+                        latitude = lat,
+                        longitude = lon,
+                        timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+                    )
+                }
+            }
+        )
     }
 
     override fun onDestroy() {
@@ -256,7 +318,6 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
             Manifest.permission.ACCESS_COARSE_LOCATION
         ).toTypedArray()
     }
-
     override fun onEmptyDetect() {
         runOnUiThread {
             binding.overlay.clear()
@@ -268,19 +329,8 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
 
         if (boundingBoxes.isNotEmpty() && (now - lastLogTime) > LOG_INTERVAL_MS) {
             lastLogTime = now
-            val currentBitmap = lastBitmap
-            if (currentBitmap != null) {
-                cameraExecutor.execute {
-                    detectionLogger.logDetections(
-                        boundingBoxes = boundingBoxes,
-                        bitmap = currentBitmap,
-                        latitude = locationHelper.getLatitude(),
-                        longitude = locationHelper.getLongitude()
-                    )
-                }
-            }
+            captureHighResPhoto(boundingBoxes)
         }
-
         runOnUiThread {
             binding.inferenceTime.text = "inference time: ${inferenceTime}ms"
             binding.overlay.apply {

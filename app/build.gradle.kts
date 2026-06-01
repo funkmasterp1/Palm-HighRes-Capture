@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "crb_damage"
+    namespace = "com.aubreymoore.palm_highres_capture" // UPDATED
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.aubreymoore.crb_damage"
+        applicationId = "com.aubreymoore.palm_highres_capture" // UPDATED
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -38,7 +38,6 @@ android {
         viewBinding = true
     }
 }
-
 dependencies {
 
     implementation("com.google.android.gms:play-services-location:21.2.0")
@@ -54,7 +53,6 @@ dependencies {
     implementation("androidx.camera:camera-camera2:${cameraxVersion}")
     implementation("androidx.camera:camera-lifecycle:${cameraxVersion}")
     implementation("androidx.camera:camera-view:${cameraxVersion}")
-
     implementation("org.tensorflow:tensorflow-lite:2.16.1")
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
 

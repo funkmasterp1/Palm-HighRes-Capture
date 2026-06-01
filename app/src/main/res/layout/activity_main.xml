@@ -19,7 +19,7 @@
             android:id="@+id/tv_title"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:text="CRB Damage Detection Demo"
+            android:text="Palm HR Capture"
             android:textColor="@color/white"
             android:textAlignment="center"
             android:textSize="30dp" />
