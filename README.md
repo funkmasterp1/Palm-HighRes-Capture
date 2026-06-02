@@ -26,3 +26,10 @@ Clone this repository and open the resulting folder with Android Studio. Then co
 ### License
 
 The original work integrated by Aubrey Moore is from [surendramaran/YOLO](https://github.com/surendramaran/YOLO) and is licensed under the [MIT License](https://github.com/surendramaran/YOLO/blob/main/YOLOv8-Object-Detector-Android-Tflite/LICENSE).
+
+
+
+Photos stored in Photo folder on Android
+
+CSV with geo data stored in:
+Internal storage\Android\data\com.aubreymoore.palm_highres_capture\files\Documents\Logs

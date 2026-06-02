@@ -1,32 +1,105 @@
 package com.aubreymoore.crb_damage
 
+import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
-import android.media.ExifInterface
+import android.net.Uri
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
+import androidx.exifinterface.media.ExifInterface
 import java.io.File
 import java.io.FileOutputStream
-import java.io.FileWriter
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
 
 class DetectionLogger(private val context: Context) {
-    private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     private val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
 
-    private fun getOutputDir(): File {
+    /**
+     * Public directory for photos so they are visible in the Gallery.
+     */
+    private fun getPublicPhotoDir(): File {
         val dir = File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
             "CRB-detections"
         )
         if (!dir.exists()) dir.mkdirs()
         return dir
     }
 
-    private fun getCsvFile(): File {
-        val today = dateFormat.format(Date())
-        return File(getOutputDir(), "crb_detections_$today.csv")
+    private fun getCsvHeader(): String {
+        return "timestamp,latitude,longitude,label,confidence,photo_path,is_high_res\n"
+    }
+
+    /**
+     * Appends content to a single master CSV ledger file located in the public Documents folder.
+     * Uses MediaStore for Android 10+ and File API for older versions.
+     */
+    private fun appendToCsv(content: String) {
+        val fileName = "crb_detections_ledger.csv"
+        val relativePath = "${Environment.DIRECTORY_DOCUMENTS}/CRB-detections"
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val resolver = context.contentResolver
+            val collection = MediaStore.Files.getContentUri("external")
+
+            // Find if file already exists
+            val projection = arrayOf(MediaStore.MediaColumns._ID)
+            val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${MediaStore.MediaColumns.RELATIVE_PATH} = ?"
+            val selectionArgs = arrayOf(fileName, "$relativePath/")
+            
+            var uri: Uri? = null
+            resolver.query(collection, projection, selection, selectionArgs, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
+                    uri = ContentUris.withAppendedId(collection, id)
+                }
+            }
+
+            // Create if it doesn't exist
+            if (uri == null) {
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "text/csv")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+                }
+                uri = resolver.insert(collection, values)
+                // Write header for new file
+                uri?.let {
+                    resolver.openOutputStream(it, "wt")?.use { out ->
+                        out.write(getCsvHeader().toByteArray())
+                    }
+                }
+            }
+
+            // Append the content
+            uri?.let {
+                try {
+                    resolver.openOutputStream(it, "wa")?.use { out ->
+                        out.write(content.toByteArray())
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        } else {
+            // Fallback for Android 9 and below
+            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "CRB-detections")
+            if (!dir.exists()) dir.mkdirs()
+            val file = File(dir, fileName)
+            val isNew = !file.exists()
+            try {
+                FileOutputStream(file, true).use { out ->
+                    if (isNew) out.write(getCsvHeader().toByteArray())
+                    out.write(content.toByteArray())
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     fun logDetections(
@@ -38,30 +111,21 @@ class DetectionLogger(private val context: Context) {
         if (boundingBoxes.isEmpty()) return
 
         val timestamp = timeFormat.format(Date())
-        val csvFile = getCsvFile()
-        val isNew = !csvFile.exists()
         val photoFile = savePhoto(bitmap, timestamp, latitude, longitude)
-        try {
-            val writer = FileWriter(csvFile, true)
-            if (isNew) {
-                writer.append("timestamp,latitude,longitude,label,confidence,photo_path\n")
-            }
-            for (box in boundingBoxes) {
-                writer.append("$timestamp,")
-                writer.append("${latitude ?: ""},")
-                writer.append("${longitude ?: ""},")
-                writer.append("${box.clsName},")
-                writer.append("${"%.3f".format(box.cnf)},")
-                writer.append("${photoFile?.absolutePath ?: ""}\n")
-            }
-            writer.flush()
-            writer.close()
-        } catch (e: Exception) {
-            e.printStackTrace()
+        
+        val sb = StringBuilder()
+        for (box in boundingBoxes) {
+            sb.append("$timestamp,")
+            sb.append("${latitude ?: ""},")
+            sb.append("${longitude ?: ""},")
+            sb.append("${box.clsName},")
+            sb.append("${"%.3f".format(Locale.US, box.cnf)},")
+            sb.append("${photoFile?.absolutePath ?: ""},")
+            sb.append("false\n")
         }
+        appendToCsv(sb.toString())
     }
 
-    // NEW: Log high-res photo from ImageCapture (for SAM3 analysis)
     fun logHighResDetection(
         photoFile: File,
         boundingBoxes: List<BoundingBox>,
@@ -69,9 +133,6 @@ class DetectionLogger(private val context: Context) {
         longitude: Double?,
         timestamp: String
     ) {
-        val csvFile = getCsvFile()
-        val isNew = !csvFile.exists()
-
         // Embed GPS EXIF into the existing high-res photo
         if (latitude != null && longitude != null) {
             try {
@@ -85,37 +146,28 @@ class DetectionLogger(private val context: Context) {
                 e.printStackTrace()
             }
         }
-        // Log to CSV with is_high_res flag
-        try {
-            val writer = FileWriter(csvFile, true)
-            if (isNew) {
-                writer.append("timestamp,latitude,longitude,label,confidence,photo_path,is_high_res\n")
-            }
 
-            for (box in boundingBoxes) {
-                writer.append("$timestamp,")
-                writer.append("${latitude ?: ""},")
-                writer.append("${longitude ?: ""},")
-                writer.append("${box.clsName},")
-                writer.append("${"%.3f".format(box.cnf)},")
-                writer.append("${photoFile.absolutePath},")
-                writer.append("true\n")
-            }
-            writer.flush()
-            writer.close()
-        } catch (e: Exception) {
-            e.printStackTrace()
+        val sb = StringBuilder()
+        for (box in boundingBoxes) {
+            sb.append("$timestamp,")
+            sb.append("${latitude ?: ""},")
+            sb.append("${longitude ?: ""},")
+            sb.append("${box.clsName},")
+            sb.append("${"%.3f".format(Locale.US, box.cnf)},")
+            sb.append("${photoFile.absolutePath},")
+            sb.append("true\n")
         }
+        appendToCsv(sb.toString())
     }
 
     private fun savePhoto(bitmap: Bitmap, timestamp: String, latitude: Double?, longitude: Double?): File? {
         return try {
             val safeTimestamp = timestamp.replace(":", "-").replace(" ", "_")
-            val photoFile = File(getOutputDir(), "photo_$safeTimestamp.jpg")
-            val out = FileOutputStream(photoFile)
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
-            out.flush()
-            out.close()
+            val photoFile = File(getPublicPhotoDir(), "photo_$safeTimestamp.jpg")
+
+            FileOutputStream(photoFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
+            }
 
             if (latitude != null && longitude != null) {
                 try {
@@ -140,7 +192,7 @@ class DetectionLogger(private val context: Context) {
         val absCoord = kotlin.math.abs(coordinate)
         val degrees = absCoord.toInt()
         val minutes = ((absCoord - degrees) * 60).toInt()
-        val seconds = (((absCoord - degrees) * 60 - minutes) * 60).toInt()
-        return "$degrees/1,$minutes/1,$seconds/1"
+        val seconds = (absCoord - degrees - minutes / 60.0) * 3600.0
+        return "$degrees/1,$minutes/1,${(seconds * 1000).toInt()}/1000"
     }
 }
