@@ -3,9 +3,8 @@ package com.aubreymoore.crb_damage
 import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
+import android.os.Looper
+import com.google.android.gms.location.*
 
 class LocationHelper(context: Context) {
 
@@ -14,27 +13,31 @@ class LocationHelper(context: Context) {
 
     var lastLocation: Location? = null
 
+    private val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(result: LocationResult) {
+            // Update the coordinate whenever the sensor sees a change
+            lastLocation = result.lastLocation
+            android.util.Log.d("GPS_DEBUG", "Update: ${lastLocation?.latitude}, ${lastLocation?.longitude}")
+        }
+    }
+
     @SuppressLint("MissingPermission")
     fun startLocationUpdates() {
-        fusedLocationClient.getCurrentLocation(
-            Priority.PRIORITY_HIGH_ACCURACY, null
-        ).addOnSuccessListener { location ->
-            lastLocation = location
+// Request immediate "last known" location to prime the pump
+        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+            if (location != null) lastLocation = location
         }
 
-        // Also request ongoing updates
-        val request = com.google.android.gms.location.LocationRequest.Builder(
-            Priority.PRIORITY_HIGH_ACCURACY, 5000L
-        ).build()
+        // Setup high-frequency requests (every 1 second)
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
+            .setMinUpdateIntervalMillis(500L) // Allow updates as fast as twice a second
+            .setWaitForAccurateLocation(false)
+            .build()
 
         fusedLocationClient.requestLocationUpdates(
             request,
-            object : com.google.android.gms.location.LocationCallback() {
-                override fun onLocationResult(result: com.google.android.gms.location.LocationResult) {
-                    lastLocation = result.lastLocation
-                }
-            },
-            android.os.Looper.getMainLooper()
+            locationCallback,
+            Looper.getMainLooper()
         )
     }
 

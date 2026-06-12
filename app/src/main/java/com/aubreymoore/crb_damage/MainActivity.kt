@@ -35,7 +35,7 @@ var vcutDetectorEnabled = true
 var confidence_threshold: Double = 0.5
 var show_conf = true
 
-private const val LOG_INTERVAL_MS = 3000L
+private const val LOG_INTERVAL_MS = 5000L
 
 class MainActivity : AppCompatActivity(), Detector.DetectorListener {
 
@@ -128,7 +128,11 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
             btnDecrement.setOnClickListener {
                 if (confidence_threshold > 0.05) {
                     confidence_threshold -= 0.05
-                    tvConfidence.text = String.format(Locale.US, "Confidence\nthreshold\n%.2f", confidence_threshold)
+                    tvConfidence.text = String.format(
+                        Locale.US,
+                        "Confidence\nthreshold\n%.2f",
+                        confidence_threshold
+                    )
                 }
             }
         }
@@ -136,7 +140,11 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
             btnIncrement.setOnClickListener {
                 if (confidence_threshold < 1.0) {
                     confidence_threshold += 0.05
-                    tvConfidence.text = String.format(Locale.US, "Confidence\nthreshold\n%.2f", confidence_threshold)
+                    tvConfidence.text = String.format(
+                        Locale.US,
+                        "Confidence\nthreshold\n%.2f",
+                        confidence_threshold
+                    )
                 }
             }
         }
@@ -161,7 +169,8 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     }
 
     private fun bindCameraUseCases() {
-        val cameraProvider = cameraProvider ?: throw IllegalStateException("Camera initialization failed.")
+        val cameraProvider =
+            cameraProvider ?: throw IllegalStateException("Camera initialization failed.")
         val rotation = binding.viewFinder.display.rotation
 
         val cameraSelector = CameraSelector.Builder()
@@ -210,7 +219,13 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
 
         cameraProvider.unbindAll()
         try {
-            camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalyzer, imageCapture)
+            camera = cameraProvider.bindToLifecycle(
+                this,
+                cameraSelector,
+                preview,
+                imageAnalyzer,
+                imageCapture
+            )
             preview?.surfaceProvider = binding.viewFinder.surfaceProvider
         } catch (exc: Exception) {
             Log.e(TAG, "Use case binding failed", exc)
@@ -220,6 +235,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
         ContextCompat.checkSelfPermission(baseContext, it) == PackageManager.PERMISSION_GRANTED
     }
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
@@ -252,9 +268,15 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
 
         // Try external storage first, fallback to app files
-        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "CRB-detections")
+        val dir = File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+            "CRB-detections"
+        )
         val dirCreated = dir.mkdirs()
-        Log.d(TAG, "Directory: ${dir.absolutePath}, mkdirs() success: $dirCreated, exists: ${dir.exists()}")
+        Log.d(
+            TAG,
+            "Directory: ${dir.absolutePath}, mkdirs() success: $dirCreated, exists: ${dir.exists()}"
+        )
 
         val photoFile = File(dir, "CRB_$timestamp.jpg")
         Log.d(TAG, "Photo will be saved to: ${photoFile.absolutePath}")
@@ -271,19 +293,21 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
                 }
 
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    Log.d(TAG, "Photo capture SUCCESS: ${photoFile.absolutePath}")
-                    Log.d(TAG, "File size: ${photoFile.length()} bytes")
-
+                    // Try to get fresh location the moment the image is saved
                     val lat = locationHelper.getLatitude()
                     val lon = locationHelper.getLongitude()
-                    Log.d(TAG, "GPS coordinates: $lat, $lon")
+
+                    Log.d(TAG, "File Saved. Final GPS Check: $lat, $lon")
 
                     detectionLogger.logHighResDetection(
                         photoFile = photoFile,
                         boundingBoxes = boundingBoxes,
                         latitude = lat,
                         longitude = lon,
-                        timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+                        timestamp = SimpleDateFormat(
+                            "yyyy-MM-dd HH:mm:ss",
+                            Locale.US
+                        ).format(Date())
                     )
                 }
             }
@@ -300,12 +324,11 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         super.onResume()
         if (allPermissionsGranted()) {
             startCamera()
-            locationHelper.startLocationUpdates()
+            locationHelper.startLocationUpdates() // Forces fresh GPS lock
         } else {
             requestPermissionLauncher.launch(REQUIRED_PERMISSIONS)
         }
     }
-
     companion object {
         private const val TAG = "Camera"
         private const val REQUEST_CODE_PERMISSIONS = 10
@@ -315,6 +338,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
             Manifest.permission.ACCESS_COARSE_LOCATION
         ).toTypedArray()
     }
+
     override fun onEmptyDetect() {
         runOnUiThread {
             binding.overlay.clear()
@@ -336,4 +360,4 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
             }
         }
     }
-}
+} // <--- THIS is the only brace that should be at the very bottom
